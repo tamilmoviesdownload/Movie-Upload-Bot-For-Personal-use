@@ -27,6 +27,9 @@ app = Client(
 
 user_data = {}
 
+def reset_user(uid):
+    user_data.pop(uid, None)
+
 # ================= TMDB FETCH ================= #
 
 def fetch_tmdb(movie_name):
@@ -64,12 +67,34 @@ def fetch_tmdb(movie_name):
         "poster": poster
     }
 
+# ================= COMMANDS ================= #
+
+@app.on_message(filters.command("start") & filters.user(ADMIN_ID))
+async def start_cmd(client, message):
+    reset_user(message.from_user.id)
+    await message.reply(
+        "🎬 TMDB Movie Bot\n\n"
+        "➡️ Send movie name to begin\n"
+        "➡️ /cancel to stop current process"
+    )
+
+@app.on_message(filters.command("cancel") & filters.user(ADMIN_ID))
+async def cancel_cmd(client, message):
+    reset_user(message.from_user.id)
+    await message.reply("❌ Cancelled. Send new movie name.")
+
 # ================= ADMIN FLOW ================= #
 
 @app.on_message(filters.private & filters.user(ADMIN_ID))
 async def admin_handler(client, message):
     uid = message.from_user.id
+    text = message.text
 
+    # Ignore commands here
+    if text.startswith("/"):
+        return
+
+    # Always allow fresh start
     if uid not in user_data:
         user_data[uid] = {"step": "movie"}
 
@@ -77,14 +102,21 @@ async def admin_handler(client, message):
 
     # STEP 1: MOVIE NAME
     if step == "movie":
-        user_data[uid]["movie_name"] = message.text
+        user_data[uid]["movie_name"] = text
         user_data[uid]["step"] = "link"
         await message.reply("🔗 Download link ?")
         return
 
     # STEP 2: DOWNLOAD LINK
     if step == "link":
-        user_data[uid]["link"] = message.text
+        if not text.startswith("http"):
+            reset_user(uid)
+            await message.reply(
+                "❌ Invalid link.\n\nSend movie name again."
+            )
+            return
+
+        user_data[uid]["link"] = text
         user_data[uid]["step"] = "send_where"
 
         buttons = InlineKeyboardMarkup([
@@ -104,9 +136,14 @@ async def callback_handler(client, callback):
     uid = callback.from_user.id
     data = user_data.get(uid)
 
+    if not data:
+        await callback.answer("Session expired. Send movie name again.", show_alert=True)
+        return
+
     movie = fetch_tmdb(data["movie_name"])
     if not movie:
-        await callback.message.edit("❌ Movie not found")
+        reset_user(uid)
+        await callback.message.edit("❌ Movie not found.\nSend new movie name.")
         return
 
     caption = f"""
@@ -132,7 +169,7 @@ async def callback_handler(client, callback):
     )
 
     await callback.message.edit("✅ Posted successfully")
-    user_data.pop(uid, None)
+    reset_user(uid)
 
 # ================= RUN ================= #
 
