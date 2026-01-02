@@ -104,7 +104,7 @@ async def admin_flow(client, message):
 ━━━━━━━━━━━━━━━━━━
 ➥ Rating : ★ {movie['rating']}/10
 ➥ Genres : {', '.join(movie['genres'])}
-➥ Languages : Hindi
+➥ Languages : Tamil
 ➥ Qualities : 480p, 720p, 1080p
 """
 
